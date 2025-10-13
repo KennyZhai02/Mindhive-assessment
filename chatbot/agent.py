@@ -1,10 +1,9 @@
-# chatbot/agent.py
 from langchain.memory import ConversationBufferMemory
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from typing import Optional
 import re
-
+from .tools import CalculatorTool, ProductRAGTool, OutletSQLTool
 
 class ConversationAgent:
     def __init__(self, llm: Optional[BaseChatModel] = None):
@@ -13,47 +12,95 @@ class ConversationAgent:
         self.slots = {
             "current_city": None,
             "current_outlet": None,
-            "last_intent": None
+            "last_intent": None,
+            "last_user_input": "",
+        }
+        self.tools = {
+            "calculator": CalculatorTool(),
+            "products": ProductRAGTool(),
+            "outlets": OutletSQLTool()
         }
 
     def update_slots(self, user_input: str) -> None:
         city_match = re.search(r'(Petaling Jaya|Kuala Lumpur|SS 2|Bangsar|Subang)', user_input, re.IGNORECASE)
         if city_match:
             self.slots["current_city"] = city_match.group(1)
-
         outlet_match = re.search(r'(SS 2|Bangsar|Subang|Damansara)', user_input, re.IGNORECASE)
         if outlet_match:
             self.slots["current_outlet"] = outlet_match.group(1)
 
     def get_followup_prompt(self, intent: str) -> str:
-        if intent == "outlet_query" and not self.slots["current_outlet"]:
-            return "Yes! Which outlet are you referring to?"
-        elif intent == "opening_time" and not self.slots["current_outlet"]:
-            return "I need to know which outlet you're asking about. Can you tell me the name?"
+        if intent == "outlet" and not self.slots["current_outlet"]:
+            return "Yes! Which outlet are you referring to? (e.g., SS 2, Bangsar)"
+        elif intent == "calculate":
+            return "What would you like to calculate? (e.g., 5 * 6)"
         return ""
 
-    def process_turn(self, user_input: str) -> str:
-        self.update_slots(user_input)
-
-        intent = "unknown"
+    def parse_intent(self, user_input: str) -> str:
         user_lower = user_input.lower()
+        if any(w in user_lower for w in ["calculate", "add", "subtract", "+", "-", "*", "/"]):
+            return "calculate"
+        elif any(w in user_lower for w in ["product", "drinkware", "tumbler", "mug"]):
+            return "product"
+        elif any(w in user_lower for w in ["outlet", "store", "location", "open", "hours", "ss 2", "bangsar"]):
+            return "outlet"
+        else:
+            return "unknown"
 
-        if "outlet" in user_lower or "store" in user_lower:
-            intent = "outlet_query"
-        elif "opening time" in user_lower or "open" in user_lower or "hours" in user_lower:
-            intent = "opening_time"
-        elif any(name in user_lower for name in ["ss 2", "bangsar", "subang", "damansara", "petaling jaya"]):
-            intent = "outlet_query"
+    def extract_calculation(self, user_input: str) -> str:
+        match = re.search(r'([\d+\-*/().\s]+)', user_input)
+        if match:
+            expr = match.group(1).strip()
+            if any(op in expr for op in "+-*/"):
+                return expr
+        return ""
 
-        self.slots["last_intent"] = intent
-
-        if intent == "outlet_query" and self.slots["current_city"]:
-            if not self.slots["current_outlet"]:
-                return self.get_followup_prompt(intent)
+    def plan_action(self, intent: str, user_input: str) -> str:
+        if intent == "calculate":
+            expr = self.extract_calculation(user_input)
+            if expr:
+                self.slots["calc_expr"] = expr
+                return "execute_calculator"
             else:
-                return f"Ah yes, the {self.slots['current_outlet']} outlet opens at 9:00AM."
-        elif intent == "opening_time" and self.slots["current_outlet"]:
-            return f"Ah yes, the {self.slots['current_outlet']} outlet opens at 9:00AM."
+                return "ask_calc_expr"
+        elif intent == "product":
+            return "execute_products"
+        elif intent == "outlet":
+            if self.slots["current_outlet"]:
+                return "execute_outlets"
+            else:
+                return "ask_outlet"
+        else:
+            return "fallback_llm"
+
+    def execute_action(self, action: str) -> str:
+        if action == "execute_calculator":
+            result = self.tools["calculator"].run(self.slots.get("calc_expr", ""))
+            return result.get("error", f"The result is {result['result']}")
+        elif action == "execute_products":
+            result = self.tools["products"].run(self.slots.get("last_user_input", ""))
+            return result.get("error", result.get("answer", "No info found."))
+        elif action == "execute_outlets":
+            result = self.tools["outlets"].run(self.slots.get("current_outlet", "") + " outlet")
+            if "error" in result:
+                return result["error"]
+            outlet = result["results"][0]
+            return f"{outlet['name']} is at {outlet['address']}. Open {outlet['opening_hours']}."
+        return "I'm not sure what to do."
+
+    def process_turn(self, user_input: str) -> str:
+        self.slots["last_user_input"] = user_input
+        self.update_slots(user_input)
+        intent = self.parse_intent(user_input)
+        self.slots["last_intent"] = intent
+        action = self.plan_action(intent, user_input)
+
+        if action == "ask_calc_expr":
+            return self.get_followup_prompt("calculate")
+        elif action == "ask_outlet":
+            return self.get_followup_prompt("outlet")
+        elif action.startswith("execute_"):
+            return self.execute_action(action)
         else:
             history = self.memory.load_memory_variables({}).get("history", [])
             history_text = "\n".join([str(msg) for msg in history])
@@ -67,5 +114,7 @@ class ConversationAgent:
         self.slots = {
             "current_city": None,
             "current_outlet": None,
-            "last_intent": None
+            "last_intent": None,
+            "last_user_input": "",
+            "calc_expr": None
         }

@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+langchain
+langchain-openai
+langchain-core
+langchain-community
+faiss-cpu
+beautifulsoup4
+lxml
+sqlalchemy
+requests
+python-dotenv
+pytest
