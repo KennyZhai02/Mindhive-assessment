@@ -33,9 +33,13 @@ class TestPlanner(unittest.TestCase):
     @patch('chatbot.tools.OutletSQLTool.run')
     def test_outlet_intent_with_slot(self, mock_outlet):
         mock_outlet.return_value = {
-            "outlet": "SS 2",
-            "address": "Jalan SS 2/67",
-            "opening_hours": "8:00AM - 10:00PM"
+            "results": [  # ← MUST be a list under "results"
+                {
+                    "name": "SS 2",              # ← Use "name", not "outlet"
+                    "address": "Jalan SS 2/67, Petaling Jaya",
+                    "opening_hours": "8:00AM - 10:00PM"
+                }
+            ]
         }
         self.agent.slots["current_outlet"] = "SS 2"
         resp = self.agent.process_turn("What are the opening hours?")

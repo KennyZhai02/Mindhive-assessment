@@ -25,6 +25,7 @@ class ConversationAgent:
         city_match = re.search(r'(Petaling Jaya|Kuala Lumpur|SS 2|Bangsar|Subang)', user_input, re.IGNORECASE)
         if city_match:
             self.slots["current_city"] = city_match.group(1)
+
         outlet_match = re.search(r'(SS 2|Bangsar|Subang|Damansara)', user_input, re.IGNORECASE)
         if outlet_match:
             self.slots["current_outlet"] = outlet_match.group(1)
@@ -82,8 +83,8 @@ class ConversationAgent:
             return result.get("error", result.get("answer", "No info found."))
         elif action == "execute_outlets":
             result = self.tools["outlets"].run(self.slots.get("current_outlet", "") + " outlet")
-            if "error" in result:
-                return result["error"]
+            if "error" in result or not result.get("results"):
+                return "I couldn't find that outlet."
             outlet = result["results"][0]
             return f"{outlet['name']} is at {outlet['address']}. Open {outlet['opening_hours']}."
         return "I'm not sure what to do."

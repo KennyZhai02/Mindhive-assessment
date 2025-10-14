@@ -1,7 +1,3 @@
-"""
-Comprehensive tests for unhappy flows and edge cases.
-Tests missing parameters, API downtime, and malicious payloads.
-"""
 import unittest
 from unittest.mock import patch, Mock
 from chatbot.agent import ConversationAgent

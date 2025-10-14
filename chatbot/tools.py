@@ -2,18 +2,19 @@ import requests
 from typing import Dict, Any
 
 class CalculatorTool:
-    def __init__(self, base_url: str = "http://localhost:8000"):
-        self.base_url = base_url
-
     def run(self, expression: str) -> Dict[str, Any]:
         if not expression.strip():
             return {"error": "Please provide an expression. Example: '5 * 6'"}
         try:
-            resp = requests.post(f"{self.base_url}/calculate", json={"expr": expression}, timeout=5)
-            resp.raise_for_status()
-            return {"result": resp.json()["result"]}
+            # Safe eval
+            if not all(c in "0123456789+-*/(). " for c in expression):
+                raise ValueError("Invalid characters")
+            result = eval(expression, {"__builtins__": {}}, {})
+            return {"result": result}
+        except ZeroDivisionError:
+            return {"error": "Cannot divide by zero"}
         except Exception as e:
-            return {"error": "I'm having trouble reaching the calculator. Please try again later."}
+            return {"error": str(e)}
 
 class ProductRAGTool:
     def __init__(self, base_url: str = "http://localhost:8000"):
