@@ -227,10 +227,29 @@ Example: SELECT * FROM outlets WHERE name LIKE '%SS 2%' OR address LIKE '%SS 2%'
 @app.get("/health")
 async def health_check():
     """Health check endpoint for monitoring"""
+    # Check if product KB is properly initialized
+    product_kb_exists = (
+        os.path.exists("vectorstore/product_kb") and
+        os.path.exists("vectorstore/product_kb/index.faiss")
+    )
+
+    # Check if outlet DB is properly initialized
+    outlet_db_exists = os.path.exists("data/outlets.db")
+    if outlet_db_exists:
+        try:
+            # Verify it's a valid SQLite database with data
+            engine = create_engine(f"sqlite:///data/outlets.db")
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT COUNT(*) FROM outlets"))
+                count = result.scalar()
+                outlet_db_exists = count > 0
+        except:
+            outlet_db_exists = False
+
     return {
         "status": "healthy",
-        "product_kb_exists": os.path.exists("vectorstore/product_kb"),
-        "outlet_db_exists": os.path.exists("data/outlets.db")
+        "product_kb_exists": product_kb_exists,
+        "outlet_db_exists": outlet_db_exists
     }
 
 # --- API Documentation Override ---

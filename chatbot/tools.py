@@ -5,36 +5,63 @@ import logging
 logger = logging.getLogger(__name__)
 
 class CalculatorTool:
-    """Calculator tool that safely evaluates mathematical expressions"""
-    
+    """Calculator tool that calls the calculator API"""
+
+    def __init__(self, base_url: str = "http://localhost:8000"):
+        self.base_url = base_url
+
     def run(self, expression: str) -> Dict[str, Any]:
         """
-        Evaluate a mathematical expression safely.
-        
+        Evaluate a mathematical expression via API.
+
         Args:
             expression: Mathematical expression string
-            
+
         Returns:
             Dict with 'result' on success or 'error' on failure
         """
         if not expression.strip():
             return {"error": "Please provide an expression. Example: '5 * 6'"}
-        
+
         try:
             # Security: Only allow safe mathematical characters
             if not all(c in "0123456789+-*/(). " for c in expression):
                 return {"error": "Invalid characters in expression. Only numbers and +, -, *, /, () are allowed."}
-            
-            # Safe eval with no builtins access
-            result = eval(expression, {"__builtins__": {}}, {})
-            return {"result": result}
-            
-        except ZeroDivisionError:
-            return {"error": "Cannot divide by zero"}
-        except SyntaxError:
-            return {"error": "Invalid mathematical expression. Please check your syntax."}
+
+            # Call the API
+            resp = requests.post(
+                f"{self.base_url}/calculate",
+                json={"expr": expression},
+                timeout=5
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return {"result": data["result"]}
+
+        except requests.exceptions.Timeout:
+            logger.error("Calculator API timeout")
+            return {"error": "I'm having trouble reaching the calculator. Please try again in a moment."}
+
+        except requests.exceptions.ConnectionError:
+            logger.error("Calculator API connection error")
+            return {"error": "I'm having trouble reaching the calculator. Please try again later."}
+
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"Calculator API HTTP error: {e}")
+            if e.response and e.response.status_code == 400:
+                try:
+                    error_detail = e.response.json().get("detail", "Invalid expression")
+                    return {"error": error_detail}
+                except:
+                    return {"error": "Invalid expression"}
+            return {"error": "I'm having trouble with the calculator. Please try again later."}
+
+        except ValueError as e:
+            logger.error(f"Calculator API JSON decode error: {e}")
+            return {"error": "I received an invalid response from the calculator. Please try again."}
+
         except Exception as e:
-            logger.error(f"Calculator error: {e}")
+            logger.error(f"Calculator unexpected error: {e}")
             return {"error": f"Calculation error: {str(e)}"}
 
 
@@ -81,7 +108,7 @@ class ProductRAGTool:
         
         except requests.exceptions.HTTPError as e:
             logger.error(f"Product API HTTP error: {e}")
-            if e.response.status_code == 500:
+            if e.response and e.response.status_code == 500:
                 return {"error": "The product service is currently unavailable. Please try again later."}
             return {"error": "I'm having trouble fetching product info. Please try again later."}
         
@@ -142,11 +169,12 @@ class OutletSQLTool:
         
         except requests.exceptions.HTTPError as e:
             logger.error(f"Outlet API HTTP error: {e}")
-            if e.response.status_code == 400:
-                # Security: Likely blocked malicious query
-                return {"error": "I couldn't process that query. Please try a different search."}
-            elif e.response.status_code == 500:
-                return {"error": "The outlet service is currently unavailable. Please try again later."}
+            if e.response:
+                if e.response.status_code == 400:
+                    # Security: Likely blocked malicious query
+                    return {"error": "I couldn't process that query. Please try a different search."}
+                elif e.response.status_code == 500:
+                    return {"error": "The outlet service is currently unavailable. Please try again later."}
             return {"error": "I'm having trouble fetching outlet info. Please try again later."}
         
         except ValueError as e:

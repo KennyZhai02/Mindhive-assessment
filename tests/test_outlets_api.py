@@ -8,11 +8,15 @@ class TestOutletsAPI(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls):
-        """Check if API is available before running tests"""
+        """Check if API is available and resources are initialized before running tests"""
         try:
             resp = requests.get(f"{cls.BASE_URL}/health", timeout=2)
             if resp.status_code != 200:
                 raise unittest.SkipTest("API server not available")
+
+            health_data = resp.json()
+            if not health_data.get("outlet_db_exists"):
+                raise unittest.SkipTest("Outlet database not initialized. Run: python ingest/create_outlets_db.py")
         except requests.exceptions.RequestException:
             raise unittest.SkipTest("API server not available")
     

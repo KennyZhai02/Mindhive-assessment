@@ -34,12 +34,17 @@ class ConversationAgent:
         if intent == "outlet" and not self.slots["current_outlet"]:
             return "Yes! Which outlet are you referring to? (e.g., SS 2, Bangsar)"
         elif intent == "calculate":
-            return "What would you like to calculate? (e.g., 5 * 6)"
+            return "what would you like to calculate? (e.g., 5 * 6)"
         return ""
 
     def parse_intent(self, user_input: str) -> str:
         user_lower = user_input.lower()
-        if any(w in user_lower for w in ["calculate", "add", "subtract", "+", "-", "*", "/"]):
+        # Check for calculation intent - but be more specific to avoid false positives
+        calc_keywords = ["calculate", "add", "subtract", "multiply", "divide"]
+        has_calc_keyword = any(w in user_lower for w in calc_keywords)
+        has_math_expr = bool(re.search(r'\d+\s*[+\-*/]\s*\d+', user_input))
+
+        if has_calc_keyword or has_math_expr:
             return "calculate"
         elif any(w in user_lower for w in ["product", "drinkware", "tumbler", "mug"]):
             return "product"
