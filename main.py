@@ -20,7 +20,10 @@ app = FastAPI(title="Mindhive Assessment API")
 # Setup templates
 templates = Jinja2Templates(directory="templates")
 
-# Global agent instance for chat sessions (in production, use session management)
+# Mock mode for demo without OpenAI credits
+MOCK_MODE = os.getenv("MOCK_MODE", "false").lower() == "true"
+
+# Global agent instance
 chat_agent = None
 
 def get_agent():
@@ -28,6 +31,21 @@ def get_agent():
     if chat_agent is None:
         chat_agent = ConversationAgent()
     return chat_agent
+
+# Mock responses database
+MOCK_PRODUCT_RESPONSES = {
+    "tumbler": "We offer several great tumbler options! The **OG CUP 2.0** (RM 49.90) features a screw-on lid and double-wall insulation. The **All-Can Tumbler** (RM 59.90) is versatile and fits standard cans. The **All Day Cup** (RM 49.90) is perfect for daily use with ergonomic design.",
+    "mug": "We have two excellent mug options: The **OG Ceramic Mug** (RM 39.90) is microwave and dishwasher safe, perfect for your morning coffee. The **ZUS Stainless Steel Mug** (RM 44.90) features double-wall insulation to keep drinks hot or cold.",
+    "og cup": "The **OG CUP 2.0** (RM 49.90) is our iconic tumbler with an upgrade! It features a screw-on lid for secure transport and double-wall insulation to keep your drinks at the perfect temperature. 500ml capacity (17oz).",
+    "price": "Our drinkware prices range from RM 39.90 to RM 59.90. Ceramic mugs start at RM 39.90, standard tumblers at RM 49.90, and premium tumblers at RM 59.90. All products feature quality materials and excellent insulation.",
+    "default": "We offer a wide range of drinkware including tumblers (RM 49.90-59.90), mugs (RM 39.90-44.90), and accessories. Our products feature quality insulation and Malaysian-inspired designs. What specific product are you interested in?"
+}
+
+MOCK_OUTLET_DATA = {
+    "ss 2": {"name": "ZUS Coffee - SS 2", "address": "No. 75, Jalan SS 2/67, SS 2, 47300 Petaling Jaya, Selangor", "opening_hours": "8:00 AM - 10:00 PM", "services": "Dine-in, Takeaway, Delivery, Drive-thru"},
+    "bangsar": {"name": "ZUS Coffee - Bangsar", "address": "No. 11, Jalan Telawi 3, Bangsar Baru, 59100 Kuala Lumpur", "opening_hours": "7:00 AM - 11:00 PM", "services": "Dine-in, Takeaway, Delivery"},
+    "klcc": {"name": "ZUS Coffee - KLCC", "address": "Lot 241, Level 2, Suria KLCC, 50088 Kuala Lumpur", "opening_hours": "9:00 AM - 10:00 PM", "services": "Dine-in, Takeaway"},
+}
 
 # --- Web Interface ---
 @app.get("/", response_class=HTMLResponse)
@@ -62,20 +80,13 @@ class CalculateRequest(BaseModel):
 
 @app.post("/calculate")
 async def calculate(request: CalculateRequest):
-    """
-    Calculate mathematical expressions.
-    Supports: +, -, *, /, parentheses
-    
-    Example: {"expr": "5 * 6"}
-    """
+    """Calculate mathematical expressions - no OpenAI needed"""
     expr = request.expr
     
-    # Security: Only allow safe mathematical characters
     if not re.match(r'^[\d+\-*/().\s]+$', expr):
-        raise HTTPException(status_code=400, detail="Invalid characters in expression. Only numbers and +, -, *, /, () are allowed.")
+        raise HTTPException(status_code=400, detail="Invalid characters in expression")
     
     try:
-        # Evaluate safely (no access to builtins)
         result = eval(expr, {"__builtins__": {}}, {})
         return {"result": result, "expression": expr}
     except ZeroDivisionError:
@@ -85,53 +96,59 @@ async def calculate(request: CalculateRequest):
 
 # --- Part 4: Product RAG ---
 @app.get("/products")
-async def search_products(query: str = Query(..., min_length=1, description="Search query for products")):
-    """
-    Search ZUS Coffee products using RAG (Retrieval-Augmented Generation).
+async def search_products(query: str = Query(..., min_length=1)):
+    """Search ZUS Coffee products using RAG (or mock mode)"""
     
-    Returns AI-generated answers based on product knowledge base.
+    if MOCK_MODE:
+        # Mock response without calling OpenAI
+        query_lower = query.lower()
+        
+        # Find best matching response
+        if "tumbler" in query_lower:
+            answer = MOCK_PRODUCT_RESPONSES["tumbler"]
+            sources = [
+                {"title": "OG CUP 2.0", "price": "RM 49.90"},
+                {"title": "All-Can Tumbler", "price": "RM 59.90"},
+                {"title": "All Day Cup", "price": "RM 49.90"}
+            ]
+        elif "mug" in query_lower:
+            answer = MOCK_PRODUCT_RESPONSES["mug"]
+            sources = [
+                {"title": "OG Ceramic Mug", "price": "RM 39.90"},
+                {"title": "ZUS Stainless Steel Mug", "price": "RM 44.90"}
+            ]
+        elif "og" in query_lower or "og cup" in query_lower:
+            answer = MOCK_PRODUCT_RESPONSES["og cup"]
+            sources = [{"title": "OG CUP 2.0", "price": "RM 49.90"}]
+        elif "price" in query_lower or "cost" in query_lower or "how much" in query_lower:
+            answer = MOCK_PRODUCT_RESPONSES["price"]
+            sources = [
+                {"title": "Various Products", "price": "RM 39.90 - 59.90"}
+            ]
+        else:
+            answer = MOCK_PRODUCT_RESPONSES["default"]
+            sources = [
+                {"title": "Drinkware Collection", "price": "Various"}
+            ]
+        
+        return {"answer": answer, "sources": sources, "mock_mode": True}
     
-    Example: /products?query=What tumblers do you have?
-    """
     try:
         vectorstore_path = "vectorstore/product_kb"
         
         if not os.path.exists(vectorstore_path):
-            raise HTTPException(
-                status_code=500, 
-                detail="Product knowledge base not initialized. Run: python ingest/build_product_vectorstore.py"
-            )
+            raise HTTPException(status_code=500, detail="Product KB not initialized")
         
-        # Load vector store
-        vectorstore = FAISS.load_local(
-            vectorstore_path, 
-            OpenAIEmbeddings(), 
-            allow_dangerous_deserialization=True
-        )
+        vectorstore = FAISS.load_local(vectorstore_path, OpenAIEmbeddings(), allow_dangerous_deserialization=True)
         retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-        
-        # Retrieve relevant documents
         docs = retriever.invoke(query)
         
         if not docs:
-            return {
-                "answer": "I couldn't find any relevant product information. Please try a different query.",
-                "sources": []
-            }
+            return {"answer": "I couldn't find relevant product information.", "sources": []}
         
-        # Build context from documents
         context = "\n".join([d.page_content for d in docs])
-        
-        # Generate answer using LLM
         prompt = PromptTemplate.from_template(
-            """You are a helpful ZUS Coffee product assistant. Answer the question based on the context provided.
-            
-Context:
-{context}
-
-Question: {question}
-
-Answer: Provide a helpful, friendly response about ZUS Coffee products."""
+            "Answer based on context:\n{context}\n\nQuestion: {question}\n\nAnswer:"
         )
         
         chain = prompt | ChatOpenAI(model="gpt-3.5-turbo", temperature=0.3) | StrOutputParser()
@@ -139,134 +156,97 @@ Answer: Provide a helpful, friendly response about ZUS Coffee products."""
         
         return {
             "answer": answer,
-            "sources": [
-                {
-                    "title": d.metadata.get("title", "Unknown"), 
-                    "price": d.metadata.get("price", "N/A")
-                } 
-                for d in docs
-            ]
+            "sources": [{"title": d.metadata.get("title"), "price": d.metadata.get("price")} for d in docs]
         }
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"RAG error: {str(e)}")
 
 # --- Part 4: Outlets Text2SQL ---
 @app.get("/outlets")
-async def search_outlets(query: str = Query(..., min_length=1, description="Natural language query for outlets")):
-    """
-    Search ZUS Coffee outlets using Text-to-SQL.
+async def search_outlets(query: str = Query(..., min_length=1)):
+    """Search ZUS Coffee outlets using Text2SQL (or mock mode)"""
     
-    Converts natural language queries to SQL and executes them safely.
+    if MOCK_MODE:
+        # Direct SQL search without LLM
+        try:
+            db_path = "data/outlets.db"
+            if not os.path.exists(db_path):
+                # Return mock data
+                query_lower = query.lower()
+                results = []
+                
+                for key, outlet in MOCK_OUTLET_DATA.items():
+                    if key in query_lower or query_lower in outlet["address"].lower():
+                        results.append(outlet)
+                
+                if not results:
+                    # Search all if no match
+                    results = list(MOCK_OUTLET_DATA.values())[:3]
+                
+                return {"results": results, "count": len(results), "mock_mode": True}
+            
+            engine = create_engine(f"sqlite:///{db_path}")
+            with engine.connect() as conn:
+                # Simple keyword search
+                sql = text("""
+                    SELECT * FROM outlets 
+                    WHERE name LIKE :query 
+                    OR address LIKE :query
+                    LIMIT 5
+                """)
+                result = conn.execute(sql, {"query": f"%{query}%"})
+                rows = [dict(row._mapping) for row in result]
+                
+                if not rows:
+                    return {"results": [], "count": 0, "message": "No outlets found"}
+                
+                return {"results": rows, "count": len(rows), "mock_mode": True}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     
-    Example: /outlets?query=outlets in Petaling Jaya
-    """
     try:
         db_path = "data/outlets.db"
-        
         if not os.path.exists(db_path):
-            raise HTTPException(
-                status_code=500, 
-                detail="Outlet database not initialized. Run: python ingest/create_outlets_db.py"
-            )
+            raise HTTPException(status_code=500, detail="Outlet DB not initialized")
         
-        # Create database engine
         engine = create_engine(f"sqlite:///{db_path}")
         
         with engine.connect() as conn:
-            # Generate SQL query using LLM
             llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
             
-            prompt = f"""Convert this natural language query to SQL for the 'outlets' table.
-            
-Table schema:
-- outlets (name TEXT, address TEXT, opening_hours TEXT, services TEXT)
-
+            prompt = f"""Convert to SQL for 'outlets' table (columns: name, address, opening_hours, services).
 Query: "{query}"
-
-Return ONLY the SQL SELECT statement, nothing else. Use LIKE for text matching.
-Example: SELECT * FROM outlets WHERE name LIKE '%SS 2%' OR address LIKE '%SS 2%'"""
+Return ONLY the SQL SELECT statement."""
             
             sql_query = llm.invoke(prompt).content.strip()
-            
-            # Remove markdown code blocks if present
             sql_query = re.sub(r'```sql\s*|\s*```', '', sql_query).strip()
             
-            # Security: Strict SQL validation
             if not sql_query.upper().startswith("SELECT"):
-                raise ValueError("Only SELECT queries are allowed")
+                raise ValueError("Only SELECT allowed")
             
-            # Block dangerous SQL keywords
-            dangerous_keywords = ["DROP", "DELETE", "UPDATE", "INSERT", "TRUNCATE", "ALTER", "CREATE", "EXEC", "--", ";"]
-            sql_upper = sql_query.upper()
+            dangerous = ["DROP", "DELETE", "UPDATE", "INSERT", "TRUNCATE", "ALTER", "CREATE", "EXEC"]
+            if any(kw in sql_query.upper() for kw in dangerous):
+                raise ValueError("Malicious SQL detected")
             
-            for keyword in dangerous_keywords:
-                if keyword in sql_upper and keyword != "SELECT":
-                    raise ValueError(f"Dangerous SQL keyword detected: {keyword}")
-            
-            # Execute query
             result = conn.execute(text(sql_query))
             rows = [dict(row._mapping) for row in result]
             
-            return {
-                "results": rows,
-                "query": query,
-                "sql": sql_query,
-                "count": len(rows)
-            }
+            return {"results": rows, "query": query, "sql": sql_query, "count": len(rows)}
     
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Text2SQL error: {str(e)}")
 
 # --- Health Check ---
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for monitoring"""
-    # Check if product KB is properly initialized
-    product_kb_exists = (
-        os.path.exists("vectorstore/product_kb") and
-        os.path.exists("vectorstore/product_kb/index.faiss")
-    )
-
-    # Check if outlet DB is properly initialized
-    outlet_db_exists = os.path.exists("data/outlets.db")
-    if outlet_db_exists:
-        try:
-            # Verify it's a valid SQLite database with data
-            engine = create_engine(f"sqlite:///data/outlets.db")
-            with engine.connect() as conn:
-                result = conn.execute(text("SELECT COUNT(*) FROM outlets"))
-                count = result.scalar()
-                outlet_db_exists = count > 0
-        except:
-            outlet_db_exists = False
-
+    """Health check endpoint"""
     return {
         "status": "healthy",
-        "product_kb_exists": product_kb_exists,
-        "outlet_db_exists": outlet_db_exists
-    }
-
-# --- API Documentation Override ---
-@app.get("/api/docs", include_in_schema=False)
-async def custom_docs():
-    """Custom API documentation"""
-    return {
-        "title": "ZUS Coffee AI Assistant API",
-        "version": "1.0.0",
-        "endpoints": {
-            "/": "Chat interface (Web UI)",
-            "/chat": "POST - Send chat message",
-            "/calculate": "POST - Calculate mathematical expressions",
-            "/products": "GET - Search products using RAG",
-            "/outlets": "GET - Search outlets using Text2SQL",
-            "/health": "GET - Health check"
-        }
+        "mock_mode": MOCK_MODE,
+        "product_kb_exists": os.path.exists("vectorstore/product_kb"),
+        "outlet_db_exists": os.path.exists("data/outlets.db")
     }
 
 if __name__ == "__main__":
