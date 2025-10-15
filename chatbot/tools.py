@@ -15,7 +15,6 @@ class CalculatorTool:
             return {"error": "Please provide a mathematical expression. Example: '5 * 6'"}
         
         try:
-            # Calculator doesn't need OpenAI, so call the API directly
             resp = requests.post(
                 f"{self.base_url}/calculate",
                 json={"expr": expression},
@@ -40,7 +39,6 @@ class ProductRAGTool:
     def __init__(self, base_url: str = None):
         self.base_url = base_url or BASE_URL
         
-        # Mock responses for common queries
         self.mock_responses = {
             "tumbler": {
                 "answer": "We offer several great tumbler options! The **OG CUP 2.0** (RM 49.90) features a screw-on lid and double-wall insulation. The **All-Can Tumbler** (RM 59.90) is versatile and fits standard cans. The **All Day Cup** (RM 49.90) is perfect for daily use with various designs.",
@@ -81,7 +79,6 @@ class ProductRAGTool:
         except requests.exceptions.Timeout:
             return {"error": "The product search is taking too long. Please try again."}
         except requests.exceptions.ConnectionError:
-            # Fallback to mock response if API is unreachable
             query_lower = query.lower()
             for key, response in self.mock_responses.items():
                 if key in query_lower:
@@ -98,7 +95,6 @@ class OutletSQLTool:
     def __init__(self, base_url: str = None):
         self.base_url = base_url or BASE_URL
         
-        # Mock outlet data
         self.mock_outlets = {
             "ss 2": {
                 "name": "ZUS Coffee - SS 2",
@@ -157,13 +153,11 @@ class OutletSQLTool:
         except requests.exceptions.Timeout:
             return {"error": "The outlet search is taking too long. Please try again."}
         except requests.exceptions.ConnectionError:
-            # Fallback to mock data
             query_lower = nl_query.lower()
             for key, outlet in self.mock_outlets.items():
                 if key in query_lower:
                     return {"results": [outlet]}
             
-            # Return all if no specific match
             return {"results": list(self.mock_outlets.values())[:3]}
         except Exception as e:
             return {"error": "I'm having trouble fetching outlet info. Please try again later."}

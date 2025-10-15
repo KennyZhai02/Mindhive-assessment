@@ -55,13 +55,11 @@ class TestProductsAPI(unittest.TestCase):
             params={"query": ""},
             timeout=5
         )
-        # FastAPI validation should catch this
         self.assertEqual(resp.status_code, 422)
     
     def test_missing_query_param(self):
         """Test missing query parameter"""
         resp = requests.get(f"{self.BASE_URL}/products", timeout=5)
-        # FastAPI validation should catch this
         self.assertEqual(resp.status_code, 422)
     
     def test_special_characters_in_query(self):
@@ -71,7 +69,6 @@ class TestProductsAPI(unittest.TestCase):
             params={"query": "café ☕"},
             timeout=10
         )
-        # Should handle gracefully
         self.assertIn(resp.status_code, [200, 500])
         if resp.status_code == 200:
             data = resp.json()
@@ -85,7 +82,6 @@ class TestProductsAPI(unittest.TestCase):
             params={"query": long_query},
             timeout=10
         )
-        # Should handle gracefully (either process or return error)
         self.assertIn(resp.status_code, [200, 400, 500])
     
     def test_nonexistent_product(self):
@@ -98,10 +94,8 @@ class TestProductsAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("answer", data)
-        # Should indicate no relevant products found
         self.assertTrue(len(data["answer"]) > 0)
 
 
 if __name__ == "__main__":
-    # Run with verbosity
     unittest.main(verbosity=2)

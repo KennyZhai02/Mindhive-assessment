@@ -6,7 +6,7 @@ import re
 import os
 from .tools import CalculatorTool, ProductRAGTool, OutletSQLTool
 
-# Check if mock mode is enabled
+
 MOCK_MODE = os.getenv("MOCK_MODE", "false").lower() == "true"
 
 class MockLLM:
@@ -23,12 +23,10 @@ class ConversationAgent:
         """Initialize conversation agent with optional mock mode"""
         
         if MOCK_MODE or not os.getenv("OPENAI_API_KEY"):
-            # Use mock LLM when in mock mode or no API key
             self.llm = MockLLM()
             self.mock_mode = True
             print("🎭 Agent initialized in MOCK MODE")
         else:
-            # Use real OpenAI LLM
             self.llm = llm or ChatOpenAI(model="gpt-3.5-turbo", temperature=0.3)
             self.mock_mode = False
             print("🤖 Agent initialized with OpenAI")
@@ -70,24 +68,19 @@ class ConversationAgent:
         
         # Calculator intent
         if any(w in user_lower for w in ["calculate", "add", "subtract", "multiply", "divide", "+", "-", "*", "/"]):
-            # Check if there's an actual math expression
             if re.search(r'\d+\s*[\+\-\*/]\s*\d+', user_input):
                 return "calculate"
             if any(w in user_lower for w in ["calculate", "add", "subtract", "multiply", "divide"]):
-                return "calculate"
-        
+                return "calculate"     
         # Product intent
         if any(w in user_lower for w in ["product", "drinkware", "tumbler", "mug", "cup", "bottle", "price", "buy", "sell"]):
             return "product"
-        
         # Outlet intent
         if any(w in user_lower for w in ["outlet", "store", "location", "branch", "open", "hours", "where", "address"]):
             return "outlet"
-        
         # Check for specific outlet names
         if any(name in user_lower for name in ["ss 2", "ss2", "bangsar", "klcc", "subang", "damansara", "mont kiara"]):
             return "outlet"
-        
         # Check for city names
         if any(city in user_lower for city in ["petaling jaya", "kuala lumpur", "kl", "selangor"]):
             return "outlet"
@@ -96,11 +89,9 @@ class ConversationAgent:
 
     def extract_calculation(self, user_input: str) -> str:
         """Extract mathematical expression from user input"""
-        # Try to find a clear math expression
         match = re.search(r'([\d\+\-\*/\(\)\.\s]+)', user_input)
         if match:
             expr = match.group(1).strip()
-            # Verify it contains an operator
             if any(op in expr for op in "+-*/"):
                 return expr
         return ""
@@ -163,20 +154,11 @@ class ConversationAgent:
     def process_turn(self, user_input: str) -> str:
         """Process a single conversation turn"""
         try:
-            # Store the input
             self.slots["last_user_input"] = user_input
-            
-            # Update slots from input
             self.update_slots(user_input)
-            
-            # Parse intent
             intent = self.parse_intent(user_input)
             self.slots["last_intent"] = intent
-            
-            # Plan action
             action = self.plan_action(intent, user_input)
-            
-            # Execute action
             if action == "ask_calc_expr":
                 return self.get_followup_prompt("calculate")
             
@@ -187,9 +169,7 @@ class ConversationAgent:
                 return self.execute_action(action)
             
             else:
-                # Fallback to LLM (or mock response)
                 if self.mock_mode:
-                    # Provide helpful mock responses
                     user_lower = user_input.lower()
                     
                     if any(greeting in user_lower for greeting in ["hello", "hi", "hey"]):
@@ -203,7 +183,6 @@ class ConversationAgent:
                     
                     return "I'm here to help with ZUS Coffee outlets, products, or calculations. What would you like to know?"
                 else:
-                    # Use real LLM
                     history = self.memory.load_memory_variables({}).get("history", [])
                     history_text = "\n".join([str(msg) for msg in history])
                     prompt = f"{history_text}\nUser: {user_input}\nBot:"
@@ -212,7 +191,6 @@ class ConversationAgent:
                     return response.content
         
         except Exception as e:
-            # Graceful error handling
             return f"I apologize, but I encountered an error. Please try asking in a different way. (Error: {str(e)})"
 
     def reset(self):

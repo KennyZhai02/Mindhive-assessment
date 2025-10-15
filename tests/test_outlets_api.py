@@ -33,7 +33,6 @@ class TestOutletsAPI(unittest.TestCase):
         self.assertIsInstance(data["results"], list)
         self.assertGreater(len(data["results"]), 0)
         
-        # Check result structure
         first_result = data["results"][0]
         self.assertIn("name", first_result)
         self.assertIn("address", first_result)
@@ -60,7 +59,6 @@ class TestOutletsAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("results", data)
-        # Should find at least one outlet
         self.assertGreaterEqual(len(data["results"]), 0)
     
     def test_sql_injection_attempt_drop_table(self):
@@ -70,16 +68,12 @@ class TestOutletsAPI(unittest.TestCase):
             params={"query": "1'; DROP TABLE outlets--"},
             timeout=10
         )
-        # Should be blocked (400) or handled safely (200 with error)
         self.assertIn(resp.status_code, [200, 400, 500])
         
         if resp.status_code == 200:
             data = resp.json()
-            # If returned 200, should have safe handling
-            # Results should be empty or error message
             self.assertTrue("results" in data or "error" in data)
         
-        # Verify database still exists by running a normal query
         verify_resp = requests.get(
             f"{self.BASE_URL}/outlets",
             params={"query": "SS 2"},
@@ -94,7 +88,6 @@ class TestOutletsAPI(unittest.TestCase):
             params={"query": "1' UNION SELECT * FROM outlets--"},
             timeout=10
         )
-        # Should be blocked or handled safely
         self.assertIn(resp.status_code, [200, 400, 500])
     
     def test_sql_injection_attempt_or_1_equals_1(self):
@@ -104,7 +97,6 @@ class TestOutletsAPI(unittest.TestCase):
             params={"query": "' OR '1'='1"},
             timeout=10
         )
-        # Should be blocked or handled safely
         self.assertIn(resp.status_code, [200, 400, 500])
     
     def test_sql_injection_attempt_delete(self):
@@ -114,10 +106,8 @@ class TestOutletsAPI(unittest.TestCase):
             params={"query": "'; DELETE FROM outlets WHERE '1'='1"},
             timeout=10
         )
-        # Should be blocked
         self.assertIn(resp.status_code, [200, 400, 500])
         
-        # Verify database integrity
         verify_resp = requests.get(
             f"{self.BASE_URL}/outlets",
             params={"query": "Bangsar"},
@@ -135,7 +125,6 @@ class TestOutletsAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("results", data)
-        # Empty results are acceptable
         self.assertIsInstance(data["results"], list)
     
     def test_empty_query(self):
@@ -145,13 +134,11 @@ class TestOutletsAPI(unittest.TestCase):
             params={"query": ""},
             timeout=5
         )
-        # FastAPI validation should catch this
         self.assertEqual(resp.status_code, 422)
     
     def test_missing_query_param(self):
         """Test missing query parameter"""
         resp = requests.get(f"{self.BASE_URL}/outlets", timeout=5)
-        # FastAPI validation should catch this
         self.assertEqual(resp.status_code, 422)
     
     def test_special_characters_in_query(self):
@@ -161,7 +148,6 @@ class TestOutletsAPI(unittest.TestCase):
             params={"query": "café near me ☕"},
             timeout=10
         )
-        # Should handle gracefully
         self.assertIn(resp.status_code, [200, 400, 500])
     
     def test_natural_language_query(self):
@@ -174,7 +160,7 @@ class TestOutletsAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("results", data)
-        self.assertIn("sql", data)  # Should return generated SQL
+        self.assertIn("sql", data)
 
 
 if __name__ == "__main__":

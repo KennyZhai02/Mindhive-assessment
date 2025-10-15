@@ -21,37 +21,27 @@ def scrape_zus_drinkware():
         soup = BeautifulSoup(response.content, 'html.parser')
         
         products = []
-        
-        # Find all product links (actual structure based on web fetch)
         product_links = soup.find_all('a', href=True)
         product_urls = [link['href'] for link in product_links if '/products/' in link['href']]
-        
-        # Remove duplicates and create full URLs
         unique_products = list(set(product_urls))
         
         print(f"Found {len(unique_products)} unique products. Scraping details...")
         
-        for product_path in unique_products[:15]:  # Limit to 15 products
+        for product_path in unique_products[:15]:
             full_url = f"https://shop.zuscoffee.com{product_path}" if product_path.startswith('/') else product_path
             
             try:
-                time.sleep(1)  # Be respectful to the server
+                time.sleep(1)  
                 prod_response = requests.get(full_url, headers=headers, timeout=10)
                 prod_soup = BeautifulSoup(prod_response.content, 'html.parser')
-                
-                # Extract product title
                 title_elem = prod_soup.find('h1', class_='product-meta__title')
                 if not title_elem:
                     title_elem = prod_soup.find('h1')
                 title = title_elem.get_text(strip=True) if title_elem else "Unknown Product"
-                
-                # Extract price
                 price_elem = prod_soup.find('span', class_='price')
                 if not price_elem:
                     price_elem = prod_soup.find('span', string=lambda x: x and 'RM' in x)
                 price = price_elem.get_text(strip=True) if price_elem else "N/A"
-                
-                # Extract description
                 desc_elem = prod_soup.find('div', class_='product-meta__description')
                 if not desc_elem:
                     desc_elem = prod_soup.find('div', class_='rte')
@@ -69,8 +59,6 @@ def scrape_zus_drinkware():
             except Exception as e:
                 print(f"  ✗ Error scraping {full_url}: {e}")
                 continue
-        
-        # Fallback: If scraping failed, create sample data based on known products
         if len(products) == 0:
             print("Web scraping failed. Creating sample data from known products...")
             products = [
@@ -148,7 +136,6 @@ def scrape_zus_drinkware():
                 }
             ]
         
-        # Save to JSONL for ingestion
         os.makedirs("data", exist_ok=True)
         with open("data/drinkware.jsonl", "w", encoding='utf-8') as f:
             for p in products:
@@ -160,7 +147,6 @@ def scrape_zus_drinkware():
     except Exception as e:
         print(f"Error during scraping: {e}")
         print("Creating fallback sample data...")
-        # Use the fallback data above
         return []
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZUS Coffee AI Assistant</title>
+    <title>AI Assistant</title>
     <style>
         * {
             margin: 0;
@@ -305,12 +305,10 @@
             const message = messageInput.value.trim();
             if (!message) return;
 
-            // Add user message
             addMessage(message, 'user');
             messageInput.value = '';
             sendButton.disabled = true;
 
-            // Show typing indicator
             showTypingIndicator();
 
             try {
@@ -351,7 +349,6 @@
             }
         }
 
-        // Focus on input when page loads
         window.onload = function() {
             messageInput.focus();
         };

@@ -13,16 +13,15 @@ class TestConversationAgent(unittest.TestCase):
 
     @patch('chatbot.tools.OutletSQLTool.run')
     def test_happy_path_three_turns(self, mock_outlet):
-        # Mock successful responses for SS 2 and Bangsar
         mock_outlet.side_effect = [
-            {  # For "SS 2 outlet"
+            {  
                 "results": [{
                     "name": "SS 2",
                     "address": "Jalan SS 2/67",
                     "opening_hours": "8:00AM - 10:00PM"
                 }]
             },
-            {  # For "Bangsar outlet"
+            { 
                 "results": [{
                     "name": "Bangsar",
                     "address": "Jalan Maarof",

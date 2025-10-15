@@ -21,21 +21,13 @@ def scrape_zus_outlets():
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Try to find outlet information in various possible formats
         store_items = soup.find_all(['div', 'article'], class_=re.compile(r'store|outlet|location', re.I))
-        
-        for item in store_items[:20]:  # Limit to 20 outlets
+        for item in store_items[:20]:
             try:
-                # Extract name
                 name_elem = item.find(['h2', 'h3', 'h4'], class_=re.compile(r'title|name|store', re.I))
                 if not name_elem:
                     name_elem = item.find(['h2', 'h3', 'h4'])
-                
-                # Extract address
                 addr_elem = item.find(['p', 'div', 'span'], class_=re.compile(r'address|location', re.I))
-                
-                # Extract hours
                 hours_elem = item.find(['p', 'div', 'span'], class_=re.compile(r'hours|time|operating', re.I))
                 
                 if name_elem and addr_elem:
@@ -52,8 +44,6 @@ def scrape_zus_outlets():
         
     except Exception as e:
         print(f"Error during web scraping: {e}")
-    
-    # If scraping fails or returns insufficient data, use sample data from known locations
     if len(outlets) < 10:
         print("Using sample data from known ZUS Coffee locations...")
         outlets = [
@@ -148,8 +138,6 @@ def scrape_zus_outlets():
                 'services': 'Dine-in, Takeaway, Delivery'
             }
         ]
-    
-    # Save to CSV
     df = pd.DataFrame(outlets)
     df.to_csv("data/outlets.csv", index=False)
     print(f"\n✓ Successfully saved {len(outlets)} outlets to data/outlets.csv")

@@ -12,18 +12,14 @@ from sqlalchemy import create_engine, text
 import re
 import os
 
-# Import the agent for chat interface
 from chatbot.agent import ConversationAgent
 
 app = FastAPI(title="Mindhive Assessment API")
 
-# Setup templates
 templates = Jinja2Templates(directory="templates")
 
-# Mock mode for demo without OpenAI credits
 MOCK_MODE = os.getenv("MOCK_MODE", "false").lower() == "true"
 
-# Global agent instance
 chat_agent = None
 
 def get_agent():
@@ -32,7 +28,6 @@ def get_agent():
         chat_agent = ConversationAgent()
     return chat_agent
 
-# Mock responses database
 MOCK_PRODUCT_RESPONSES = {
     "tumbler": "We offer several great tumbler options! The **OG CUP 2.0** (RM 49.90) features a screw-on lid and double-wall insulation. The **All-Can Tumbler** (RM 59.90) is versatile and fits standard cans. The **All Day Cup** (RM 49.90) is perfect for daily use with ergonomic design.",
     "mug": "We have two excellent mug options: The **OG Ceramic Mug** (RM 39.90) is microwave and dishwasher safe, perfect for your morning coffee. The **ZUS Stainless Steel Mug** (RM 44.90) features double-wall insulation to keep drinks hot or cold.",
@@ -100,10 +95,8 @@ async def search_products(query: str = Query(..., min_length=1)):
     """Search ZUS Coffee products using RAG (or mock mode)"""
     
     if MOCK_MODE:
-        # Mock response without calling OpenAI
         query_lower = query.lower()
-        
-        # Find best matching response
+
         if "tumbler" in query_lower:
             answer = MOCK_PRODUCT_RESPONSES["tumbler"]
             sources = [
@@ -167,11 +160,9 @@ async def search_outlets(query: str = Query(..., min_length=1)):
     """Search ZUS Coffee outlets using Text2SQL (or mock mode)"""
     
     if MOCK_MODE:
-        # Direct SQL search without LLM
         try:
             db_path = "data/outlets.db"
             if not os.path.exists(db_path):
-                # Return mock data
                 query_lower = query.lower()
                 results = []
                 
@@ -180,14 +171,12 @@ async def search_outlets(query: str = Query(..., min_length=1)):
                         results.append(outlet)
                 
                 if not results:
-                    # Search all if no match
                     results = list(MOCK_OUTLET_DATA.values())[:3]
                 
                 return {"results": results, "count": len(results), "mock_mode": True}
             
             engine = create_engine(f"sqlite:///{db_path}")
             with engine.connect() as conn:
-                # Simple keyword search
                 sql = text("""
                     SELECT * FROM outlets 
                     WHERE name LIKE :query 
@@ -238,7 +227,6 @@ Return ONLY the SQL SELECT statement."""
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Text2SQL error: {str(e)}")
 
-# --- Health Check ---
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""

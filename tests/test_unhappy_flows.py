@@ -13,8 +13,6 @@ class TestUnhappyFlows(unittest.TestCase):
     
     def setUp(self):
         self.agent = ConversationAgent(llm=MockLLM())
-
-    # --- Part 5.1: Missing Parameters ---
     
     def test_calculate_without_expression(self):
         """Test calculator with missing expression"""
@@ -37,10 +35,7 @@ class TestUnhappyFlows(unittest.TestCase):
     def test_products_vague_query(self):
         """Test product search with vague query"""
         resp = self.agent.process_turn("Tell me about products")
-        # Should still try to respond, but might ask for clarification
         self.assertTrue(len(resp) > 0)
-
-    # --- Part 5.2: API Downtime Simulation ---
     
     @patch('requests.post')
     def test_calculator_api_down(self, mock_post):
@@ -100,7 +95,6 @@ class TestUnhappyFlows(unittest.TestCase):
         self.assertIn("error", result)
         self.assertIn("trouble fetching outlet", result["error"].lower())
 
-    # --- Part 5.3: Malicious Payloads ---
     
     def test_sql_injection_classic(self):
         """Test classic SQL injection attempt"""
@@ -113,9 +107,7 @@ class TestUnhappyFlows(unittest.TestCase):
         
         for query in malicious_queries:
             with self.subTest(query=query):
-                # The tool should handle this gracefully
                 tool = OutletSQLTool()
-                # Mock the API response to show it was blocked
                 with patch('requests.get') as mock_get:
                     mock_response = Mock()
                     mock_response.status_code = 400
@@ -124,7 +116,6 @@ class TestUnhappyFlows(unittest.TestCase):
                     mock_get.return_value = mock_response
                     
                     result = tool.run(query)
-                    # Should return an error, not crash
                     self.assertTrue("error" in result or len(result) == 0)
     
     def test_calculator_code_injection(self):
@@ -140,7 +131,6 @@ class TestUnhappyFlows(unittest.TestCase):
         
         for expr in malicious_expressions:
             with self.subTest(expr=expr):
-                # Mock the API to reject invalid expressions
                 with patch('requests.post') as mock_post:
                     mock_response = Mock()
                     mock_response.status_code = 400
@@ -161,20 +151,14 @@ class TestUnhappyFlows(unittest.TestCase):
         
         for payload in xss_payloads:
             with self.subTest(payload=payload):
-                # Agent should handle this gracefully
                 resp = self.agent.process_turn(payload)
-                # Should not crash and should return a response
                 self.assertTrue(len(resp) > 0)
-                # Should not contain the raw payload
                 self.assertNotIn("<script>", resp)
-
-    # --- Additional Edge Cases ---
     
     def test_extremely_long_input(self):
         """Test handling of extremely long input"""
         long_input = "A" * 10000
         resp = self.agent.process_turn(long_input)
-        # Should handle gracefully without crashing
         self.assertTrue(len(resp) > 0)
     
     def test_unicode_and_special_characters(self):
@@ -237,8 +221,6 @@ class TestUnhappyFlows(unittest.TestCase):
         self.agent.process_turn("Is there an outlet in Petaling Jaya?")
         self.agent.process_turn("Actually, I meant Kuala Lumpur")
         resp = self.agent.process_turn("Show me Bangsar outlet")
-        
-        # Should handle the location change gracefully
         self.assertEqual(self.agent.slots["current_outlet"], "Bangsar")
         self.assertTrue(len(resp) > 0)
     
@@ -246,8 +228,6 @@ class TestUnhappyFlows(unittest.TestCase):
         """Test switching between different intents"""
         self.agent.process_turn("Calculate 5 + 5")
         resp = self.agent.process_turn("What products do you have?")
-        
-        # Should handle context switch without errors
         self.assertTrue(len(resp) > 0)
         self.assertEqual(self.agent.slots["last_intent"], "product")
 
@@ -267,7 +247,6 @@ class TestSecurityMeasures(unittest.TestCase):
         for inp in dangerous_inputs:
             with self.subTest(input=inp):
                 resp = agent.process_turn(inp)
-                # Should not expose file system
                 self.assertNotIn("/etc/", resp)
                 self.assertNotIn("C:\\", resp)
     
@@ -284,10 +263,8 @@ class TestSecurityMeasures(unittest.TestCase):
         for inp in dangerous_inputs:
             with self.subTest(input=inp):
                 resp = agent.process_turn(inp)
-                # Should handle gracefully
                 self.assertTrue(len(resp) > 0)
 
 
 if __name__ == "__main__":
-    # Run tests with verbose output
     unittest.main(verbosity=2)

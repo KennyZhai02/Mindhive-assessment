@@ -1,4 +1,3 @@
-# ingest/create_outlets_db.py
 import sqlite3
 import pandas as pd
 import os
