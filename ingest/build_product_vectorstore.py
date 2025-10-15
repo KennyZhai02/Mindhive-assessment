@@ -1,39 +1,96 @@
+from langchain_community.document_loaders import JSONLoader
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
-import json
+import os
+import sys
 
 def build_product_vectorstore():
-    docs = []
-    with open("data/drinkware.jsonl", "r", encoding="utf-8") as file:
-        for line_num, line in enumerate(file, start=1):
-            line = line.strip()
-            if line:  
-                try:
-                    json_obj = json.loads(line)
-                    
-                    doc = Document(
-                        page_content=f"{json_obj.get('title', '')} - {json_obj.get('description', '')}",
+    """
+    Build product vector store from scraped data.
+    Skips if OPENAI_API_KEY is not available or MOCK_MODE is enabled.
+    """
+    
+    # Check if we should skip vector store building
+    mock_mode = os.getenv("MOCK_MODE", "false").lower() == "true"
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    
+    if mock_mode:
+        print("⚠️  MOCK_MODE enabled - Skipping vector store build")
+        print("✓  Mock mode will use keyword-based product search")
+        return
+    
+    if not api_key:
+        print("⚠️  OPENAI_API_KEY not found - Skipping vector store build")
+        print("✓  Set OPENAI_API_KEY environment variable to build vector store")
+        print("✓  Or enable MOCK_MODE for demo without OpenAI")
+        return
+    
+    # Check if data file exists
+    if not os.path.exists("data/drinkware.jsonl"):
+        print("❌ Error: data/drinkware.jsonl not found")
+        print("   Run: python ingest/scrape_products.py")
+        sys.exit(1)
+    
+    try:
+        print("📊 Building product vector store...")
+        
+        # Load documents
+        loader = JSONLoader(
+            file_path="data/drinkware.jsonl",
+            jq_schema=".title + ' - ' + .description",
+            text_content=False
+        )
+        docs = loader.load()
+        
+        print(f"   Loaded {len(docs)} products")
+        
+        # Process documents
+        processed_docs = []
+        for doc in docs:
+            # Handle different document structures
+            if hasattr(doc, 'page_content') and isinstance(doc.page_content, dict):
+                content = doc.page_content
+                text = f"{content.get('title', '')} - {content.get('description', '')}"
+                processed_docs.append(
+                    Document(
+                        page_content=text,
                         metadata={
-                            "title": json_obj.get("title"),
-                            "price": json_obj.get("price"),
-                            "url": json_obj.get("url")
+                            "title": content.get("title", "Unknown"),
+                            "price": content.get("price", "N/A")
                         }
                     )
-                    docs.append(doc)
-                except json.JSONDecodeError as e:
-                    print(f"Warning: Error parsing JSON on line {line_num}: {e}")
-                    print(f"  Content: {line[:100]}...") 
-
-    if not docs:
-        print("No valid documents were loaded from the JSONL file.")
+                )
+            else:
+                # If page_content is already a string
+                text = str(doc.page_content)
+                processed_docs.append(
+                    Document(
+                        page_content=text,
+                        metadata=getattr(doc, 'metadata', {})
+                    )
+                )
+        
+        print(f"   Processed {len(processed_docs)} documents")
+        
+        # Create embeddings and vector store
+        print("   Creating embeddings (this may take a minute)...")
+        embeddings = OpenAIEmbeddings()
+        
+        vectorstore = FAISS.from_documents(processed_docs, embeddings)
+        
+        # Save vector store
+        os.makedirs("vectorstore", exist_ok=True)
+        vectorstore.save_local("vectorstore/product_kb")
+        
+        print("✅ Product vector store built and saved to vectorstore/product_kb")
+        
+    except Exception as e:
+        print(f"❌ Error building vector store: {str(e)}")
+        print("   This is okay if you're using MOCK_MODE")
+        print("   To use full AI features, ensure OPENAI_API_KEY is set and has credits")
+        # Don't exit with error - allow deployment to continue
         return
-
-
-    embeddings = OpenAIEmbeddings()
-    vectorstore = FAISS.from_documents(docs, embeddings)
-    vectorstore.save_local("vectorstore/product_kb")
-    print(" Product vector store built and saved.")
 
 if __name__ == "__main__":
     build_product_vectorstore()
